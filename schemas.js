@@ -28,7 +28,7 @@ urlSchema.pre("save", function(next) {
       console.log(counter.count);
       doc._id = counter.count;
       doc.created_at = new Date();
-      console.log(doc);
+      // console.log(doc);
       next();
     }
   );

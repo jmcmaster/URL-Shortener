@@ -1,11 +1,12 @@
 require("dotenv").config();
 const mongoose = require("mongoose");
 const express = require("express");
+const Hashids = require("hashids");
 const bodyParser = require("body-parser");
 const { URL, Counter } = require("./schemas");
 
 // Connect Database
-const { DB_USER, DB_PASS, DB_HOST } = process.env;
+const { DB_USER, DB_PASS, DB_HOST, PORT } = process.env;
 const dbPromise = mongoose.connect(
   `mongodb://${DB_USER}:${DB_PASS}@${DB_HOST}`,
   { useNewUrlParser: true }
@@ -34,7 +35,7 @@ dbPromise.catch(function(err) {
 
 // Create Server
 const app = express();
-const port = 3000;
+const port = PORT || 3000;
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
@@ -45,26 +46,57 @@ app.get("/", function(req, res) {
   });
 });
 
+app.get("/:hash", (req, res) => {
+  const baseid = req.params.hash;
+
+  const hashids = new Hashids();
+  const id = hashids.decode(baseid);
+
+  URL.findOne({ _id: id }, function(err, doc) {
+    if (doc) {
+      res.redirect(doc.url);
+    } else {
+      console.log("entry not found");
+      res.redirect("/");
+    }
+  });
+});
+
 app.post("/shorten", (req, res) => {
-  if (!req.body.url) {
+  const urlData = req.body.url;
+
+  if (!urlData) {
     res.send("Error: Request requires a URL");
     return;
   }
 
-  const record = new URL({ url: req.body.url });
-  record.save().then(() => console.log("Saved!"));
-  res.send(record);
-});
-
-app.get("/:id", (req, res) => {
-  const record = URL.findById(req.param("id"), (err, url) => {
-    if (err) {
-      res.send(err.message);
-      return;
+  URL.findOne({ url: urlData }, function(err, doc) {
+    const hashids = new Hashids();
+    if (doc) {
+      console.log("entry found in db!");
+      res.send({
+        url: urlData,
+        hash: hashids.encode(doc._id),
+        status: 200,
+        statusTxt: "OK"
+      });
+    } else {
+      console.log("entry not found");
+      const url = new URL({ url: urlData });
+      url.save(function(err) {
+        if (err) {
+          console.error(err);
+        }
+        res.send({
+          url: urlData,
+          hash: hashids.encode(url._id),
+          status: 200,
+          statusTxt: "OK"
+        });
+      });
     }
-    res.send(url.url);
   });
 });
 
 // Start listeneing for requests
-app.listen(port, () => console.log(`Example app listening on port ${port}!`));
+app.listen(port, () => console.log(`Listening on port ${port}!`));
